@@ -1,0 +1,313 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/assets/favicon-DRK6xunG.png" type="image/png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Loading</title>
+
+    <script>
+        // Swallow the Escape key before it reaches the WASM engine.
+        // In this web build the engine's in-game menu renders as a black
+        // screen (its TTF fonts are missing), so opening it is useless.
+        // A capture-phase listener on window fires before the engine's
+        // document/canvas handlers, so the engine never sees Escape.
+        // The browser still releases the mouse pointer-lock, which we turn
+        // into something useful: it reveals our own map-picker (see below).
+        window.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+            }
+        }, true);
+    </script>
+
+    <script>
+        // ---- In-browser map picker ----
+        // The engine's bundle rebuilds <body> (via innerHTML), which silently
+        // drops any <script> placed there. So the picker lives in <head>, builds
+        // its own DOM with inline styles, and re-injects itself if the body gets
+        // wiped. It switches the server map for everyone via `rcon changelevel`,
+        // calling the engine instance that web/main.js exposes on window.__xash.
+        (function () {
+            // Must match rcon_password in cstrike/server.cfg. Public on a LAN by design.
+            var RCON_PW = 'cs16lan';
+            var MAPS = [
+                'de_dust2', 'de_dust', 'de_inferno', 'de_nuke', 'de_train',
+                'de_aztec', 'de_cbble', 'de_chateau', 'de_prodigy', 'de_vertigo',
+                'de_airstrip', 'de_piranesi', 'de_storm', 'de_survivor', 'de_torn',
+                'cs_assault', 'cs_italy', 'cs_office', 'cs_militia', 'cs_havana',
+                'cs_estate', 'cs_backalley', 'cs_siege', 'cs_747', 'as_oilrig'
+            ];
+            var CUSTOM = ['cs_mansion']; // non-stock maps added via ./add-maps.sh
+
+            function css(el, s) { for (var k in s) el.style[k] = s[k]; }
+
+            function switchMap(name) {
+                var x = window.__xash;
+                if (x && x.Cmd_ExecuteString) {
+                    x.Cmd_ExecuteString('rcon_password ' + RCON_PW);
+                    x.Cmd_ExecuteString('rcon changelevel ' + name);
+                }
+                var o = document.getElementById('cs-mapmenu');
+                if (o) o.style.display = 'none';
+            }
+
+            function build() {
+                if (!document.body || document.getElementById('cs-mapbtn')) return;
+
+                var btn = document.createElement('button');
+                btn.id = 'cs-mapbtn';
+                btn.textContent = '🗺 Maps';
+                css(btn, { position: 'fixed', top: '10px', left: '50%', transform: 'translateX(-50%)',
+                    zIndex: 2147483646, display: 'none', padding: '7px 16px', background: '#000000cc',
+                    color: '#f6b265', border: '1px solid #f6b265', borderRadius: '8px',
+                    font: '600 14px Arial, sans-serif', cursor: 'pointer' });
+
+                var overlay = document.createElement('div');
+                overlay.id = 'cs-mapmenu';
+                css(overlay, { position: 'fixed', inset: '0', zIndex: 2147483647, display: 'none',
+                    alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.6)',
+                    fontFamily: 'Arial, Helvetica, sans-serif' });
+
+                var panel = document.createElement('div');
+                css(panel, { background: '#1b1b1bf2', border: '1px solid #f6b265', borderRadius: '10px',
+                    padding: '20px 22px', width: '90%', maxWidth: '820px', maxHeight: '82vh',
+                    overflow: 'auto', boxShadow: '0 10px 50px #000' });
+                panel.innerHTML =
+                    '<h2 style="color:#f6b265;margin:0 0 4px;font-size:19px">🗺 Choose a map</h2>' +
+                    '<p style="color:#aaa;margin:0 0 16px;font-size:12.5px">Switches the map for ' +
+                    '<b>everyone</b> on the server (takes a few seconds). Click the game afterwards ' +
+                    'to lock the mouse and keep playing.</p>';
+
+                var gridEl = document.createElement('div');
+                css(gridEl, { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(125px,1fr))', gap: '8px' });
+
+                function mkMap(name, isCustom) {
+                    var m = document.createElement('button');
+                    m.textContent = name;
+                    var base = isCustom ? '#f6b265' : '#eee';
+                    css(m, { background: '#2a2a2a', color: base, border: '1px solid ' + (isCustom ? '#f6b265' : '#444'),
+                        borderRadius: '6px', padding: '10px 6px', cursor: 'pointer', fontSize: '13px' });
+                    m.onmouseover = function () { m.style.background = '#f6b265'; m.style.color = '#111'; };
+                    m.onmouseout = function () { m.style.background = '#2a2a2a'; m.style.color = base; };
+                    m.onclick = function () { switchMap(name); };
+                    gridEl.appendChild(m);
+                }
+                CUSTOM.forEach(function (n) { mkMap(n, true); });
+                MAPS.forEach(function (n) { mkMap(n, false); });
+
+                var close = document.createElement('button');
+                close.textContent = 'Close';
+                css(close, { marginTop: '16px', background: 'none', border: 'none', color: '#999',
+                    cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' });
+                close.onclick = function () { overlay.style.display = 'none'; };
+
+                panel.appendChild(gridEl);
+                panel.appendChild(close);
+                overlay.appendChild(panel);
+                btn.onclick = function () { overlay.style.display = 'flex'; };
+
+                document.body.appendChild(btn);
+                document.body.appendChild(overlay);
+            }
+
+            function tick() {
+                build(); // re-inject if the engine wiped <body>
+                var btn = document.getElementById('cs-mapbtn');
+                if (!btn) return;
+                var running = !!(window.__xash && window.__xash.running);
+                var free = !document.pointerLockElement;
+                // The button is only useful when the game is running and the mouse
+                // is free (it can't be clicked while pointer-locked anyway).
+                btn.style.display = (running && free) ? 'block' : 'none';
+                if (!free) { var o = document.getElementById('cs-mapmenu'); if (o) o.style.display = 'none'; }
+            }
+
+            document.addEventListener('pointerlockchange', tick, false);
+            setInterval(tick, 800);
+            if (document.readyState !== 'loading') build();
+            else document.addEventListener('DOMContentLoaded', build);
+        })();
+    </script>
+
+    <style>
+        body {
+            background-color: black;
+            margin: 0;
+        }
+
+        .notDraggable {
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none;
+        }
+
+        @keyframes pulsate {
+            0% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(0.5);
+                opacity: 0.75;
+            }
+        }
+
+        @keyframes pulsate-end {
+            0% {
+                transform: translate(-50%, -50%) scale(0.75);
+                opacity: 0.87;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0;
+            }
+        }
+
+        img {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100vw;
+            max-height: 100vh;
+            animation-name: pulsate;
+            animation-duration: 0.75s;
+            animation-iteration-count: infinite;
+            animation-direction: alternate;
+            z-index: 2;
+            transition: opacity ease-in-out 0.5s;
+        }
+
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        form {
+            margin: 0;
+            padding: 16px;
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: white;
+        }
+
+        form > div {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #warning {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 3;
+            text-align: center;
+            color: red;
+            opacity: 0;
+            transition: opacity ease-in-out 0.5s;
+        }
+
+        progress {
+            border-radius: 1px;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            height: 8px;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        progress::-webkit-progress-bar {
+            background-color: #eee;
+        }
+
+        progress::-webkit-progress-value {
+            background-color: #f6b265;
+        }
+
+        progress::-moz-progress-bar {
+            background-color: #f6b265;
+        }
+
+        #social {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .github {
+            width: 24px;
+            height: auto;
+        }
+
+        .discord {
+            width: 24px;
+            height: auto;
+        }
+
+        audio {
+            display: none;
+        }
+    </style>
+  <script type="module" crossorigin src="/assets/main-Sj92UznW.js"></script>
+</head>
+<body>
+<div id="social">
+    <a href="https://github.com/yohimik/webxash3d-fwgs" target="_blank">
+        <svg width="98" height="96" viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" class="github">
+            <path fill-rule="evenodd" clip-rule="evenodd"
+                  d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"
+                  fill="#fff"/>
+        </svg>
+    </a>
+    <a href="https://discord.gg/cRNGjWfTDd" target="_blank">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 126.644 96" class="discord">
+            <path fill="#fff"
+                  d="M81.15,0c-1.2376,2.1973-2.3489,4.4704-3.3591,6.794-9.5975-1.4396-19.3718-1.4396-28.9945,0-.985-2.3236-2.1216-4.5967-3.3591-6.794-9.0166,1.5407-17.8059,4.2431-26.1405,8.0568C2.779,32.5304-1.6914,56.3725.5312,79.8863c9.6732,7.1476,20.5083,12.603,32.0505,16.0884,2.6014-3.4854,4.8998-7.1981,6.8698-11.0623-3.738-1.3891-7.3497-3.1318-10.8098-5.1523.9092-.6567,1.7932-1.3386,2.6519-1.9953,20.281,9.547,43.7696,9.547,64.0758,0,.8587.7072,1.7427,1.3891,2.6519,1.9953-3.4601,2.0457-7.0718,3.7632-10.835,5.1776,1.97,3.8642,4.2683,7.5769,6.8698,11.0623,11.5419-3.4854,22.3769-8.9156,32.0509-16.0631,2.626-27.2771-4.496-50.9172-18.817-71.8548C98.9811,4.2684,90.1918,1.5659,81.1752.0505l-.0252-.0505ZM42.2802,65.4144c-6.2383,0-11.4159-5.6575-11.4159-12.6535s4.9755-12.6788,11.3907-12.6788,11.5169,5.708,11.4159,12.6788c-.101,6.9708-5.026,12.6535-11.3907,12.6535ZM84.3576,65.4144c-6.2637,0-11.3907-5.6575-11.3907-12.6535s4.9755-12.6788,11.3907-12.6788,11.4917,5.708,11.3906,12.6788c-.101,6.9708-5.026,12.6535-11.3906,12.6535Z"/>
+        </svg>
+    </a>
+</div>
+<img id="logo" alt="Logo" class="notDraggable" src="/assets/logo-DTTQpMBv.png"/>
+<progress id="progress" value="0" max="1"></progress>
+<canvas id="canvas">
+</canvas>
+<form id="form">
+    <div>
+        <label>
+            Touch controls
+            <input type="checkbox" id="touchControls">
+        </label>
+    </div>
+    <div>
+        <label>
+            Player name
+            <input id="username" type="text" required/>
+        </label>
+        <button type="submit">
+            Start
+        </button>
+    </div>
+</form>
+<p id="warning" class="notDraggable">If it's not starting, try to enable microphone and refresh</p>
+</body>
+</html>

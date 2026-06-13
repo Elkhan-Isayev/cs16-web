@@ -1,0 +1,28 @@
+name: cs16-web
+
+services:
+  cs16-web:
+    # Pinned by digest: the patched web client (web/main.js, web/index.html)
+    # references this image's hashed asset filenames. If you bump the image,
+    # re-run ./prepare-client.sh to regenerate the patched client.
+    image: yohimik/cs-web-server@sha256:ce01d36559ae78446baed1032252b87ee9ec639e4f2f2cdbbdcf75d75359a699
+    container_name: cs16-web
+    restart: unless-stopped
+    platform: linux/386
+    command: ["+map", "de_dust2", "+maxplayers", "16"]
+    environment:
+      PORT: 27018
+      IP: 192.168.1.201
+    volumes:
+      - "./valve.zip:/xashds/public/valve.zip"
+      # patched in-browser client: map picker + Esc fix + exposed engine handle
+      - "./web/index.html:/xashds/public/index.html"
+      - "./web/main.js:/xashds/public/assets/main-Sj92UznW.js"
+      # server config: full-money arsenal + rcon for the map picker
+      - "./cstrike/server.cfg:/xashds/cstrike/server.cfg"
+      # custom maps (server side; clients get them from valve.zip)
+      - "./custom-maps/cs_mansion.bsp:/xashds/cstrike/maps/cs_mansion.bsp"
+    ports:
+      - "27016:27016"
+      - "27018:27018"
+      - "27018:27018/udp"
