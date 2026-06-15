@@ -34,13 +34,19 @@ internet required once the assets are cached.
 
 ## How to play
 
+**Prerequisites:** just [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+The game assets (`valve.zip`, ~400 MB) are **not** shipped in this repo (Valve copyright +
+size); on the host's first run `start.sh` builds them automatically from the pinned server
+image — no SteamCMD or manual download needed.
+
 ```bash
 cd cs16-web
 ./start.sh
 ```
 
-`start.sh` starts Docker if needed, builds the patched web client and pulls custom
-maps on first run, detects the host's LAN IP, writes it into the config, and copies a
+`start.sh` starts Docker if needed, builds the patched web client, builds the game
+assets (`valve.zip`) from the pinned server image if they're missing, pulls custom maps
+on first run, detects the host's LAN IP, writes it into the config, and copies a
 ready-to-share link to the clipboard — just paste it into your team chat.
 
 Everyone on the same Wi-Fi/LAN opens the link in Chrome / Edge / Firefox, enters a
@@ -53,9 +59,9 @@ Stop the server: `./stop.sh`. Live logs: `docker logs -f cs16-web`.
 
 1. **Host machine** — any Mac/PC with [Docker Desktop](https://www.docker.com/products/docker-desktop/)
    installed, on the office Wi-Fi/LAN. This is the only machine that needs setup.
-2. **First-time build** of the game content (`valve.zip`) — see
-   [Rebuilding `valve.zip`](#rebuilding-valvezip). It's downloaded once via SteamCMD
-   and reused forever.
+2. **First-time build** of the game content (`valve.zip`) happens automatically on the
+   first `./start.sh` — it's extracted from the pinned server image and reused forever
+   (no SteamCMD needed). To rebuild it manually, see [Rebuilding `valve.zip`](#rebuilding-valvezip).
 3. **Launch:** `./start.sh`. It prints and copies a link like `http://192.168.1.201:27016`.
 4. **Share the link** in the team chat. Players just open it — nothing to install.
 5. **Firewall:** allow inbound TCP `27016` and TCP/UDP `27018` on the host (macOS will
@@ -123,9 +129,10 @@ The upstream bundle's filename is content-hashed inside the image, so the image 
 
 ### Rebuilding `valve.zip`
 
-`valve.zip` holds the game assets (maps, models, sounds), pulled from Valve's free
-anonymous dedicated-server download (SteamCMD app 90). It is **not** included in this
-repo. To build it:
+`valve.zip` holds the game assets (maps, models, sounds). It is **not** included in this
+repo (Valve copyright + size). Normally you don't build it by hand — `./start.sh` extracts
+it from the pinned server image automatically on first run. To rebuild it manually from
+Valve's free anonymous dedicated-server download (SteamCMD app 90) instead:
 
 ```bash
 steamcmd +@sSteamCmdForcePlatformType linux +force_install_dir "$(pwd)/hlds" \

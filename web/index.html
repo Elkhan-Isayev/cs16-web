@@ -131,6 +131,47 @@
         })();
     </script>
 
+    <script>
+        // ---- Loading percentage ----
+        // The engine drives the thin <progress id="progress"> bar while it
+        // downloads valve.zip (~400 MB, once per browser, then cached). That
+        // 8px bar is easy to miss, so we mirror its value into a readable
+        // percentage + hint under the logo. We poll because the engine sets
+        // progress.value directly (no event), and we fade out together with it
+        // (the engine sets the bar's opacity to 0 when the download completes).
+        (function () {
+            var done = false, ticks = 0;
+            var id = setInterval(function () {
+                var bar = document.getElementById('progress');
+                var txt = document.getElementById('cs-loadtext');
+                var pct = document.getElementById('cs-loadpct');
+                if (!bar || !txt || !pct) return;
+                ticks++;
+
+                // Engine sets the bar's opacity to 0 the moment assets are ready.
+                // On a cached/instant load that happens within the first ticks —
+                // before we ever reveal the caption — so it never flashes.
+                if (bar.style.opacity === '0') {
+                    txt.style.opacity = '0';
+                    if (!done) { done = true; clearInterval(id); }
+                    return;
+                }
+
+                var max = bar.max || 1;
+                var ratio = max > 0 ? bar.value / max : 0;
+                // If the server omits Content-Length the engine stores raw byte
+                // counts (>1); we can't show a real %, so fall back to a spinner-ish dash.
+                if (ratio > 1.0001) pct.textContent = '…';
+                else pct.textContent = Math.round(Math.min(ratio, 1) * 100) + '%';
+
+                // Reveal only once the download has genuinely been running for a
+                // moment (~600ms). Skips the instant cached case entirely, so the
+                // caption no longer appears-then-vanishes on a repeat visit.
+                if (ticks >= 3) txt.style.opacity = '1';
+            }, 200);
+        })();
+    </script>
+
     <style>
         body {
             background-color: black;
@@ -245,6 +286,34 @@
             background-color: #f6b265;
         }
 
+        /* Loading caption under the logo: turns the easy-to-miss 8px <progress>
+           bar into something legible (percent + a one-time-download hint). It
+           reads the same #progress element the engine drives, and fades out
+           with it when the assets finish downloading. */
+        #cs-loadtext {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, calc(-50% + 120px));
+            z-index: 2;
+            text-align: center;
+            font: 14px Arial, Helvetica, sans-serif;
+            line-height: 1.5;
+            opacity: 0; /* revealed by the script only for slow (uncached) loads */
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #cs-loadpct {
+            display: block;
+            color: #f6b265;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        #cs-loadhint {
+            color: #888;
+        }
+
         #social {
             position: fixed;
             top: 16px;
@@ -289,6 +358,10 @@
 </div>
 <img id="logo" alt="Logo" class="notDraggable" src="/assets/logo-DTTQpMBv.png"/>
 <progress id="progress" value="0" max="1"></progress>
+<div id="cs-loadtext" class="notDraggable">
+    <span id="cs-loadpct">0%</span>
+    <span id="cs-loadhint">Loading game files (~400&nbsp;MB, first visit only)</span>
+</div>
 <canvas id="canvas">
 </canvas>
 <form id="form">

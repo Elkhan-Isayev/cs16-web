@@ -15,6 +15,34 @@ if [ ! -f web/main.js ]; then
   ./prepare-client.sh
 fi
 
+# First run: build the game assets (valve.zip) if absent. It is NOT in the repo
+# (Valve's copyrighted content + ~400 MB > GitHub's file limit), so a fresh clone
+# has no copy and must produce one. This MUST happen before `docker compose up`:
+# otherwise Docker bind-mounts a path that doesn't exist and silently creates an
+# empty ./valve.zip DIRECTORY, which the server then serves as a broken non-zip
+# file — and every browser hangs forever on a pulsating logo (no error shown).
+#
+# We build it from the pinned server image, which already ships the game files
+# under /xashds/{valve,cstrike} — so a clone needs only Docker, no SteamCMD.
+#
+# Drop the empty-directory trap left by any earlier run that hit exactly that.
+[ -d valve.zip ] && rmdir valve.zip 2>/dev/null
+if [ ! -f valve.zip ] || ! unzip -l valve.zip >/dev/null 2>&1; then
+  [ -f valve.zip ] && { echo "valve.zip is present but not a valid zip — rebuilding."; rm -f valve.zip; }
+  IMG=$(grep -E '^[[:space:]]*image:' docker-compose.yml | awk '{print $2}')
+  echo "Building valve.zip from $IMG (one-time, ~400 MB)..."
+  CID=$(docker create "$IMG") || { echo "✗ could not access server image — check your connection."; exit 1; }
+  STAGE=$(mktemp -d)
+  docker cp "$CID:/xashds/valve" "$STAGE/valve"
+  docker cp "$CID:/xashds/cstrike" "$STAGE/cstrike"
+  docker rm -f "$CID" >/dev/null 2>&1
+  TARGET="$(pwd)/valve.zip"
+  ( cd "$STAGE" && zip -rq "$TARGET" valve cstrike \
+      -x "*.so" -x "*.dll" -x "*.exe" -x "*.dylib" -x "valve/dlls/*" -x "*/logs/*" )
+  rm -rf "$STAGE"
+  unzip -l valve.zip >/dev/null 2>&1 || { echo "✗ valve.zip build failed — see README."; exit 1; }
+fi
+
 # First run: pull custom maps into valve.zip + the server (cs_mansion, ...).
 if [ -f valve.zip ] && ! unzip -l valve.zip "cstrike/maps/cs_mansion.bsp" >/dev/null 2>&1; then
   echo "Adding custom maps..."
