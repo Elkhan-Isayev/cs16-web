@@ -39,6 +39,10 @@ The game assets (`valve.zip`, ~400 MB) are **not** shipped in this repo (Valve c
 size); on the host's first run `start.sh` builds them automatically from the pinned server
 image — no SteamCMD or manual download needed.
 
+**Host OS:** `start.sh` runs on **macOS and Linux** natively, and on **Windows via WSL2**
+(or Git Bash) — it's a bash script and won't run in native cmd/PowerShell. **Players** join
+from any OS in any modern browser; only the host runs the script.
+
 ```bash
 cd cs16-web
 ./start.sh

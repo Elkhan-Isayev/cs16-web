@@ -27,7 +27,9 @@ add_map () {
     curl -fsSL -A "Mozilla/5.0" -o "$tmp/map.zip" "$url"
     unzip -o -j "$tmp/map.zip" "maps/$name.bsp" -d custom-maps >/dev/null
   fi
-  if [ "$(xxd -p -l1 "custom-maps/$name.bsp")" != "1e" ]; then
+  # First byte must be 0x1e (GoldSrc BSP v30). `od` is POSIX (portable); `xxd`
+  # isn't always installed on Linux.
+  if [ "$(od -An -tx1 -N1 "custom-maps/$name.bsp" | tr -d ' \n')" != "1e" ]; then
     echo "✗ $name.bsp is not a GoldSrc v30 BSP"; rm -rf "$tmp"; exit 1
   fi
 

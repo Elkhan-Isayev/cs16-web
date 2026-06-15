@@ -31,7 +31,8 @@ if ! grep -q "window.__xash=new Xash3DWebRTC(" web/main.js; then
 fi
 
 # Keep the hashed filename consistent in the page and the compose mount.
-sed -i '' -E "s#/assets/main-[A-Za-z0-9_-]+\.js#/assets/$MAINJS#g" web/index.html
-sed -i '' -E "s#/xashds/public/assets/main-[A-Za-z0-9_-]+\.js#/xashds/public/assets/$MAINJS#g" docker-compose.yml
+# perl -i (not `sed -i`) so the in-place edit works the same on macOS and Linux.
+perl -i -pe "s#/assets/main-[A-Za-z0-9_-]+\.js#/assets/$MAINJS#g" web/index.html
+perl -i -pe "s#/xashds/public/assets/main-[A-Za-z0-9_-]+\.js#/xashds/public/assets/$MAINJS#g" docker-compose.yml
 
 echo "Done. web/main.js regenerated and references updated to $MAINJS"
