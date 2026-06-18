@@ -11,7 +11,10 @@
 set -e
 cd "$(dirname "$0")"
 
-IMG=$(grep -E '^[[:space:]]*image:' docker-compose.yml | awk '{print $2}')
+# Read the game image from the cs16-web service specifically (the proxy service
+# also has an image: line, so a blanket grep would grab both).
+IMG=$(awk '/^  cs16-web:/{f=1} f && /^    image:/{print $2; exit}' docker-compose.yml)
+[ -n "$IMG" ] || { echo "Could not read the cs16-web image from docker-compose.yml."; exit 1; }
 echo "Extracting web client from $IMG ..."
 
 CID=$(docker create "$IMG")

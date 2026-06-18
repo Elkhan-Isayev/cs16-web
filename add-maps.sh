@@ -39,7 +39,7 @@ add_map () {
   else
     local stage="$tmp/stage"; mkdir -p "$stage/cstrike/maps"
     cp "custom-maps/$name.bsp" "$stage/cstrike/maps/"
-    ( cd "$stage" && zip -gq "$OLDPWD/valve.zip" "cstrike/maps/$name.bsp" )
+    ( cd "$stage" && zip -1 -gq "$OLDPWD/valve.zip" "cstrike/maps/$name.bsp" )
     echo "✓ $name injected into valve.zip"
   fi
   rm -rf "$tmp"
