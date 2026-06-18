@@ -35,9 +35,9 @@ internet required once the assets are cached.
 ## How to play
 
 **Prerequisites:** just [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-The game assets (`valve.zip`, ~400 MB) are **not** shipped in this repo (Valve copyright +
-size); on the host's first run `start.sh` builds them automatically from the pinned server
-image — no SteamCMD or manual download needed.
+The game assets (`valve.zip`, ~210 MB — trimmed of Half-Life content CS 1.6 never loads) are
+**not** shipped in this repo (Valve copyright + size); on the host's first run `start.sh` builds
+them automatically from the pinned server image — no SteamCMD or manual download needed.
 
 **Host OS:** `start.sh` runs on **macOS and Linux** natively, and on **Windows via WSL2**
 (or Git Bash) — it's a bash script and won't run in native cmd/PowerShell. **Players** join
@@ -54,7 +54,7 @@ on first run, detects the host's LAN IP, writes it into the config, and copies a
 ready-to-share link to the clipboard — just paste it into your team chat.
 
 Everyone on the same Wi-Fi/LAN opens the link in Chrome / Edge / Firefox, enters a
-nickname, waits for the assets to load (~400 MB on first visit, then cached), picks a
+nickname, waits for the assets to load (~210 MB on first visit, then cached), picks a
 team — and plays. Everyone spawns with **$16000**, so walk into spawn and buy anything.
 
 Stop the server: `./stop.sh`. Live logs: `docker logs -f cs16-web`.
@@ -119,6 +119,12 @@ never modified:
   self-heals, because the engine rebuilds `<body>` on load.
 - **`web/main.js`** — **generated** by `./prepare-client.sh`; a one-line patch exposing
   the engine instance on `window.__xash` so the picker can call `rcon changelevel`.
+- **`proxy/nginx.conf`** — a small nginx reverse-proxy sidecar (added in `docker-compose.yml`)
+  that owns the public port `27016` and forwards to the game container internally. It injects
+  the HTTP caching headers the in-image server can't — `immutable` for the content-hashed
+  bundle/WASM, `no-cache` (store + revalidate) for `valve.zip` so a rebuild is picked up at
+  once — so repeat visits don't re-download the payload. It passes the same-origin
+  `/websocket` signaling upgrade through; WebRTC media on `27018` stays direct, untouched.
 
 The upstream bundle's filename is content-hashed inside the image, so the image is
 **pinned by digest** in `docker-compose.yml`. If you bump the image, re-run
@@ -129,7 +135,8 @@ The upstream bundle's filename is content-hashed inside the image, so the image 
 - **The host IP must match `IP:` in `docker-compose.yml`** (WebRTC requirement);
   `./start.sh` updates it on every launch.
 - `sv_lan` must stay `0` in `cstrike/server.cfg` — `1` breaks RCON / the map picker.
-- Ports: `27016` (HTTP — game page + signaling), `27018` TCP/UDP (WebRTC game traffic).
+- Ports: `27016` (HTTP — game page + signaling, served by the nginx proxy), `27018` TCP/UDP
+  (WebRTC game traffic, direct to the game container).
 
 ### Rebuilding `valve.zip`
 
@@ -149,15 +156,20 @@ cd hlds && zip -r ../valve.zip valve cstrike \
 the engine crashes on startup without `cstrike/delta.lst`.) After rebuilding, run
 `./add-maps.sh` again to re-add the custom maps.
 
+> Note: `start.sh` additionally trims Half-Life single-player maps, intro media and HL-only
+> sounds that CS 1.6 never loads (~400 MB → ~210 MB). The manual command above keeps the full
+> set — see the exclude list in `start.sh` for the trimmed build.
+
 ## Project layout
 
 ```
-docker-compose.yml     # service (image pinned by digest) + volume mounts
+docker-compose.yml     # game service + nginx proxy (image pinned by digest) + volume mounts
 start.sh / stop.sh     # launch / stop; start.sh bootstraps client + custom maps
 prepare-client.sh      # regenerate the patched web/main.js from the pinned image
 add-maps.sh            # download custom maps into valve.zip + custom-maps/
+proxy/nginx.conf       # caching reverse-proxy (owns :27016, /websocket passthrough)
 cstrike/server.cfg     # full-money arsenal + RCON password for the map picker
-web/index.html         # patched client page: map picker + Esc handling
+web/index.html         # patched client page: join UI + loading + map picker + Esc handling
 web/main.js            # generated, gitignored (run prepare-client.sh)
 custom-maps/*.bsp      # bundled custom maps, committed (mounted into the server)
 valve.zip              # game content, gitignored (rebuild via SteamCMD)

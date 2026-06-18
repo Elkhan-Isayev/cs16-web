@@ -22,7 +22,24 @@ services:
       - "./cstrike/server.cfg:/xashds/cstrike/server.cfg"
       # custom maps (server side; clients get them from valve.zip)
       - "./custom-maps/cs_mansion.bsp:/xashds/cstrike/maps/cs_mansion.bsp"
+    # 27016 (HTTP page + WebRTC signaling) is published by the proxy below, not
+    # here — the proxy injects caching headers. WebRTC media stays direct on 27018.
+    expose:
+      - "27016"
     ports:
-      - "27016:27016"
       - "27018:27018"
       - "27018:27018/udp"
+
+  # Reverse proxy: owns public 27016, adds Cache-Control headers the in-image
+  # server can't, and passes the /websocket signaling upgrade through. See
+  # proxy/nginx.conf + docs/PERFORMANCE.md.
+  proxy:
+    image: nginx:1.29.1-alpine
+    container_name: cs16-proxy
+    restart: unless-stopped
+    depends_on:
+      - cs16-web
+    ports:
+      - "27016:27016"
+    volumes:
+      - "./proxy/nginx.conf:/etc/nginx/nginx.conf:ro"
